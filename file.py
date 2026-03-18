@@ -4,6 +4,12 @@
 import network
 import socket
 import time # same as utime library
+from machine import Pin
+from time import sleep
+import dht 
+
+# For DHT22 Sensor
+sensor = dht.DHT22(Pin(22))
 
 # Create an Access Point
 ssid = 'RPI_PICO_AP'       #Set access point name. you can change this name.
@@ -24,7 +30,7 @@ s.bind(('', 80))
 s.listen(5) # maximum number of requests that can be queued
 
 # create a web page
-def web_page():
+def web_page(temp, humid):
     html = """
 <!DOCTYPE html> 
 <html> 
@@ -135,8 +141,8 @@ function updateData(){
     const temperature = document.getElementById("tempSlider").value 
     const humidity = document.getElementById("humSlider").value 
     const air = document.getElementById("airSlider").value 
-    document.getElementById("temp").innerText = temperature + " °C" 
-    document.getElementById("humidity").innerText = humidity + " %" 
+    document.getElementById("temp").innerText = temp_val + " °C" 
+    document.getElementById("humidity").innerText = humid_val + " %" 
     document.getElementById("air").innerText = air 
     const alarm = document.getElementById("alarmBox") 
     if(air < SAFE){ 
@@ -160,20 +166,33 @@ setInterval(updateData,500)
 </body> 
 </html>   
             """
-    return html
+    return html.format(temp_val=temp, humid_val=humid)
 
 
 # Response when connection received 
 while True:
-    conn, addr = s.accept()
-    print('Got a connection from %s' % str(addr))
-    request = conn.recv(1024)
-    response = web_page() # indicate the response when connection is received
-    conn.send("HTTP/1.1 200 OK\n")
-    conn.send("Content-Type: text/html\n")
-    conn.send("Connection: close\n\n")
-    conn.sendall(response)
-    conn.close()
+    
+    try:    
+        sensor.measure()
+        temp = sensor.temperature()
+        humid = sensor.humidity()
+        temp_f = temp * (9/5) + 32.0
+        print('Temperature: %3.1f C' %temp)
+        print('Humidity: %3.1f %%' %humid)
+        
+        
+        conn, addr = s.accept()
+        print('Got a connection from %s' % str(addr))
+        request = conn.recv(1024)
+        response = web_page(temp, humid) # indicate the response when connection is received
+        conn.send("HTTP/1.1 200 OK\n")
+        conn.send("Content-Type: text/html\n")
+        conn.send("Connection: close\n\n")
+        conn.sendall(response)
+        conn.close()        
+    except OSError as e:
+        print('Failed to read a sensor.')
+    
 
 
 
