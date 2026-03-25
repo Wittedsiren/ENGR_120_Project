@@ -14,7 +14,7 @@ humid = 0
 gas = 0
 last_read = 0
 
-ssid = 'RPI_PICO_AP'
+ssid = 'Pico W Smart Environment Monitor'
 password = '12345678'
 
 ap = network.WLAN(network.AP_IF)
@@ -26,7 +26,9 @@ while not ap.active():
 
 print('AP Ready:', ap.ifconfig())
 
-
+#Html code
+#Async function with a JSON fetch for the data
+#If gas value is too large it assumes the sensor has been disconnected
 def web_page():
     return """<!DOCTYPE html>
 <html>
@@ -104,8 +106,10 @@ async function updateData(){
         document.getElementById("gas").innerText = data.gas;
 
         let status = "";
-        if (data.gas > 350){
-            status = "Excess Smoke";
+        if (data.gas > 10000){
+            status = "Gas sensor disconnected. Expect large value";
+        } else if (data.gas > 350){
+            status = "Excess Smoke. Triggering Fire Alarm";
         } else if (data.gas > 150){
             status = "Excess CO2";
         } else {
@@ -127,6 +131,7 @@ updateData();
 </html>"""
     
 
+#Waiting for someone to connect
 
 addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
 s = socket.socket()
@@ -138,6 +143,7 @@ print("Server running")
 
 while True:
     try:
+        # Esnures it refreshes every 2 seconds and no less otherwise DHT22 sensor will error
         if time() - last_read > 2:
             try:
                 DHT22_Sensor.measure()
@@ -146,7 +152,7 @@ while True:
                 humid = DHT22_Sensor.humidity()
                 print("Updated:", temp, humid, gas)
                 
-                if gas > 150:
+                if gas > 350:
                     Fire_Alarm.on()
                 else:
                     Fire_Alarm.off()
@@ -157,7 +163,7 @@ while True:
         conn, addr = s.accept()
         request = conn.recv(1024).decode()
 
-        # API endpoint
+        # Responds the the fetch, packages up the data and sends it
         if "/data" in request:
             data = json.dumps({
                 "temp": temp,
@@ -169,8 +175,8 @@ while True:
             conn.send(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n')
             conn.sendall(data.encode())
 
-        # main page
         else:
+            #Dont send data if not requested
             conn.send(b'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n')
             conn.sendall(web_page().encode())
 
